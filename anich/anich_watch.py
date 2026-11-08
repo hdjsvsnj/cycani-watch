@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 from email.header import Header
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, formatdate
 
 BASE = "https://anich.sends.eu.org"
@@ -131,11 +132,33 @@ def collect_watch(token):
     return items
 
 
-def send_mail(subject, lines):
+def _card_html(title, sub, img):
+    img_html = ('<img src="%s" width="96" style="width:96px;height:132px;object-fit:cover;'
+                'border-radius:6px;display:block;" />' % img) if img else ""
+    return ('<table cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px 0;">'
+            '<tr><td valign="top" style="padding-right:12px;">%s</td>'
+            '<td valign="top" style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;'
+            'color:#222;line-height:1.6;"><div style="font-weight:600;font-size:15px;">%s</div>'
+            '<div style="color:#666;">%s</div></td></tr></table>' % (img_html, title, sub))
+
+
+def send_mail(subject, lines, cards=None, intro=None):
     smtp_user = os.environ["SMTP_USER"]
     to_addr = os.environ.get("MAIL_TO") or smtp_user
-    body = "\n".join(lines) + "\n\n--\nAniCh 追番提醒（自动发送）\n"
-    msg = MIMEText(body, "plain", "utf-8")
+    plain = "\n".join(lines) + "\n\n--\nAniCh 追番提醒（自动发送）\n"
+
+    html_parts = ['<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#222;">']
+    if intro:
+        html_parts.append('<p style="margin:0 0 14px 0;">%s</p>' % intro)
+    for (t, s, img) in (cards or []):
+        html_parts.append(_card_html(t, s, img))
+    html_parts.append('<p style="color:#999;font-size:12px;margin-top:20px;">--<br>'
+                      'AniCh 追番提醒（自动发送）</p></div>')
+    html = "\n".join(html_parts)
+
+    msg = MIMEMultipart("alternative")
+    msg.attach(MIMEText(plain, "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
     msg["Subject"] = Header(subject, "utf-8")
     msg["From"] = formataddr((str(Header("AniCh 追番提醒", "utf-8")), smtp_user))
     msg["To"] = to_addr
@@ -176,8 +199,7 @@ def main():
             continue
         old = int(eps[vid])
         if ep > old:
-            updates.append("%s：第%d集 → 第%d集（共%s集）" % (
-                title, old, ep, it.get("episodes_total") or "?"))
+            updates.append((it, old, ep))
             eps[vid] = ep
         elif ep < old:
             eps[vid] = ep
@@ -189,8 +211,8 @@ def main():
         print("[mail] 测试邮件已发送")
     for s in new_subs:
         print("[new] %s" % s)
-    for u in updates:
-        print("[update] %s" % u)
+    for (it, old, ep) in updates:
+        print("[update] %s：第%d集 → 第%d集" % (it.get("title"), old, ep))
 
     state["episodes"] = eps
     if new_subs or updates:
@@ -199,17 +221,25 @@ def main():
         json.dump(state, f, ensure_ascii=False, indent=2)
 
     if updates:
-        send_mail("AniCh 追番更新 · %d 部" % len(updates),
-                  ["你的收藏有新集数了：", ""] + updates)
+        lines = ["你的收藏有新集数了：", ""]
+        cards = []
+        for (it, old, ep) in updates:
+            lines.append("- %s：第%d集 → 第%d集（共%s集）" % (
+                it.get("title"), old, ep, it.get("episodes_total") or "?"))
+            cards.append((it.get("title") or "?", "第%d集 → 第%d集（共%s集）" % (
+                old, ep, it.get("episodes_total") or "?"), it.get("image")))
+        send_mail("AniCh 追番更新 · %d 部" % len(updates), lines,
+                  cards=cards, intro="你的收藏有新集数了：")
         print("[mail] 已发送")
     elif os.environ.get("FORCE_REPORT") == "1":
         lines = ["本次巡检结论：暂无更新。", "", "当前「我在看的」收藏："]
+        cards = []
         for it in items:
-            lines.append("- %s（第%s集 / 共%s集）" % (
-                it.get("title") or it.get("id"),
-                it.get("episode") or "?",
-                it.get("episodes_total") or "?"))
-        send_mail("AniCh 巡检报告 · 暂无更新", lines)
+            sub = "第%s集 / 共%s集" % (it.get("episode") or "?", it.get("episodes_total") or "?")
+            lines.append("- %s（%s）" % (it.get("title") or it.get("id"), sub))
+            cards.append((it.get("title") or "?", sub, it.get("image")))
+        send_mail("AniCh 巡检报告 · 暂无更新", lines,
+                  cards=cards, intro="本次巡检结论：暂无更新。当前「我在看的」收藏：")
         print("[mail] 巡检报告已发送（暂无更新）")
     return 0
 
