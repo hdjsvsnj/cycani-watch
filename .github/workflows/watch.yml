@@ -1,8 +1,7 @@
 name: cycani-watch
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
+  # 站点按 IP 地区封禁，GitHub 美国运行器会被拒绝（HTTP 403），因此停用定时
   workflow_dispatch:
 
 permissions:
