@@ -183,13 +183,18 @@ def main():
             eps[vid] = ep
 
     print("[sync] 收藏 %d 部" % len(items))
+    if os.environ.get("TEST_MAIL") == "1":
+        send_mail("AniCh 测试邮件 · GitHub Actions",
+                  ["这是一封测试邮件，证明云端巡检与发信链路正常。"])
+        print("[mail] 测试邮件已发送")
     for s in new_subs:
         print("[new] %s" % s)
     for u in updates:
         print("[update] %s" % u)
 
     state["episodes"] = eps
-    state["updated"] = int(time.time())
+    if new_subs or updates:
+        state["updated"] = int(time.time())
     with open(STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
