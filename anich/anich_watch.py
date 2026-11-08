@@ -132,14 +132,19 @@ def collect_watch(token):
     return items
 
 
-def _card_html(title, sub, img):
+def _tz_now():
+    t = time.gmtime(time.time() + 8 * 3600)
+    return "%d年%d月%d日 %02d:%02d:%02d" % (
+        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec)
+
+
+def _card_html(title, sub, img, extra=""):
     img_html = ('<img src="%s" width="96" style="width:96px;height:132px;object-fit:cover;'
                 'border-radius:6px;display:block;" />' % img) if img else ""
-    return ('<table cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px 0;">'
+    return ('<table cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px 0;">'
             '<tr><td valign="top" style="padding-right:12px;">%s</td>'
             '<td valign="top" style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;'
-            'color:#222;line-height:1.6;"><div style="font-weight:600;font-size:15px;">%s</div>'
-            '<div style="color:#666;">%s</div></td></tr></table>' % (img_html, title, sub))
+            'color:#222;line-height:1.7;">%s</td></tr></table>' % (img_html, extra or title + sub))
 
 
 def send_mail(subject, lines, cards=None, intro=None):
@@ -149,9 +154,9 @@ def send_mail(subject, lines, cards=None, intro=None):
 
     html_parts = ['<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#222;">']
     if intro:
-        html_parts.append('<p style="margin:0 0 14px 0;">%s</p>' % intro)
-    for (t, s, img) in (cards or []):
-        html_parts.append(_card_html(t, s, img))
+        html_parts.append('<p style="margin:0 0 16px 0;font-size:15px;">%s</p>' % intro)
+    for c in (cards or []):
+        html_parts.append(_card_html(c[0], c[1], c[2], c[3] if len(c) > 3 else ""))
     html_parts.append('<p style="color:#999;font-size:12px;margin-top:20px;">--<br>'
                       'AniCh 追番提醒（自动发送）</p></div>')
     html = "\n".join(html_parts)
@@ -221,25 +226,32 @@ def main():
         json.dump(state, f, ensure_ascii=False, indent=2)
 
     if updates:
-        lines = ["你的收藏有新集数了：", ""]
+        now = _tz_now()
+        lines = ["欧尼酱！你收藏的番剧更新啦："]
         cards = []
         for (it, old, ep) in updates:
-            lines.append("- %s：第%d集 → 第%d集（共%s集）" % (
-                it.get("title"), old, ep, it.get("episodes_total") or "?"))
-            cards.append((it.get("title") or "?", "第%d集 → 第%d集（共%s集）" % (
-                old, ep, it.get("episodes_total") or "?"), it.get("image")))
-        send_mail("AniCh 追番更新 · %d 部" % len(updates), lines,
-                  cards=cards, intro="你的收藏有新集数了：")
+            name = it.get("title") or "?"
+            block = ("番剧名称：%s<br>更新时间：%s<br>备注信息：第%d集" % (name, now, ep))
+            lines.append("")
+            lines.append("番剧名称：%s" % name)
+            lines.append("更新时间：%s" % now)
+            lines.append("备注信息：第%d集" % ep)
+            cards.append((name, "第%d集" % ep, it.get("image"), block))
+        send_mail("番剧更新提醒", lines, cards=cards,
+                  intro="欧尼酱！你收藏的番剧更新啦：")
         print("[mail] 已发送")
     elif os.environ.get("FORCE_REPORT") == "1":
+        now = _tz_now()
         lines = ["本次巡检结论：暂无更新。", "", "当前「我在看的」收藏："]
         cards = []
         for it in items:
+            name = it.get("title") or it.get("id")
             sub = "第%s集 / 共%s集" % (it.get("episode") or "?", it.get("episodes_total") or "?")
-            lines.append("- %s（%s）" % (it.get("title") or it.get("id"), sub))
-            cards.append((it.get("title") or "?", sub, it.get("image")))
-        send_mail("AniCh 巡检报告 · 暂无更新", lines,
-                  cards=cards, intro="本次巡检结论：暂无更新。当前「我在看的」收藏：")
+            block = ("番剧名称：%s<br>更新时间：%s<br>备注信息：%s" % (name, now, sub))
+            lines.append("- %s（%s）" % (name, sub))
+            cards.append((name, sub, it.get("image"), block))
+        send_mail("AniCh 巡检报告 · 暂无更新", lines, cards=cards,
+                  intro="本次巡检结论：暂无更新。当前「我在看的」收藏：")
         print("[mail] 巡检报告已发送（暂无更新）")
     return 0
 
