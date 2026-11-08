@@ -182,16 +182,39 @@ def main():
         state = {}
     eps = state.get("episodes") or {}
 
-    token = login_token(os.environ["ANICH_USER"], os.environ["ANICH_PASS"])
     try:
-        http(BASE + "/init", headers={"_": auth_header(token)})
-    except Exception:
-        pass
-    items = collect_watch(token)
+        token = login_token(os.environ["ANICH_USER"], os.environ["ANICH_PASS"])
+        try:
+            http(BASE + "/init", headers={"_": auth_header(token)})
+        except Exception:
+            pass
+        items = collect_watch(token)
+    except Exception as e:
+        fails = int(state.get("fail_count") or 0) + 1
+        state["fail_count"] = fails
+        state["last_error"] = ("%s: %s" % (type(e).__name__, str(e)))[:200]
+        with open(STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+        print("[error] 巡检失败（连续 %d 次）：%s" % (fails, state["last_error"]))
+        if fails >= 2:
+            try:
+                send_mail("AniCh 巡检异常 · 连续 %d 次失败" % fails,
+                          ["巡检连续 %d 次拿不到收藏，可能站点接口变了或账号异常。" % fails,
+                           "", "最近一次错误：", state["last_error"],
+                           "", "时间：%s" % _tz_now()],
+                          intro="巡检连续 %d 次失败，追番提醒已经失效。" % fails)
+                print("[mail] 异常告警已发送")
+            except Exception as e2:
+                print("[error] 告警邮件也失败：%s" % e2)
+        return 1
 
     if not items:
         print("[warn] 收藏为空，本轮跳过")
         return 0
+
+    if state.get("fail_count"):
+        state["fail_count"] = 0
+        state.pop("last_error", None)
 
     updates, new_subs = [], []
     for it in items:
