@@ -8,6 +8,10 @@ on:
         description: "发一封测试邮件验证链路"
         required: false
         default: "0"
+      force_report:
+        description: "无论有无更新都发一封巡检结果邮件"
+        required: false
+        default: "0"
 permissions:
   contents: write
 concurrency:
@@ -26,6 +30,7 @@ jobs:
           SMTP_PASS: ${{ secrets.CYCANI_SMTP_PASS }}
           MAIL_TO: ${{ secrets.CYCANI_MAIL_TO }}
           TEST_MAIL: ${{ inputs.test_mail || '0' }}
+          FORCE_REPORT: ${{ inputs.force_report || '0' }}
         run: python3 anich/anich_watch.py
       - name: 提交基线
         run: |
