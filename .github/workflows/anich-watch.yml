@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      test_mail:
+        description: "发一封测试邮件验证链路"
+        required: false
+        default: "0"
 permissions:
   contents: write
 concurrency:
@@ -20,6 +25,7 @@ jobs:
           SMTP_USER: ${{ secrets.CYCANI_SMTP_USER }}
           SMTP_PASS: ${{ secrets.CYCANI_SMTP_PASS }}
           MAIL_TO: ${{ secrets.CYCANI_MAIL_TO }}
+          TEST_MAIL: ${{ inputs.test_mail || '0' }}
         run: python3 anich/anich_watch.py
       - name: 提交基线
         run: |
