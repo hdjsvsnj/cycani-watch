@@ -1,0 +1,25 @@
+name: anich-keepalive
+on:
+  schedule:
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 写入心跳
+        run: |
+          date -u "+%Y-%m-%dT%H:%M:%SZ" > anich/heartbeat.txt
+          cat anich/heartbeat.txt
+      - name: 提交心跳
+        run: |
+          git config user.name "anich-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add anich/heartbeat.txt
+          if ! git diff --quiet --cached; then
+            git commit -m "chore: keepalive"
+            git push
+          fi
