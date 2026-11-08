@@ -4,9 +4,11 @@
 
 ## 原理
 
-- 站点接口 `GET /api/videos/{id}` + 请求头 `X-App-Name: cyc_web`，返回里 `remarks`（如 `05|周六25:35后`）前面的数字就是当前集数。
-- 脚本每轮只发 1 个请求，和 `state.json` 里记录的旧集数比对，变大才发信。
-- SMTP 走 `smtp.qq.com:465`，SSL 直连。
+- 用站点账号登录（`POST /api/auth/login`，body `{username, password}`），拿 Bearer token。
+- 每轮 `GET /api/user/favorites` 拉你的收藏，返回里每条带 `video.remarks`（如 `05|周六25:35后`），前面的数字就是当前集数；你在站点新收藏一部，下一轮自动纳入监控。
+- token 存在 `state.json` 里，过期自动重新登录。
+- 只和 `state.json` 记录的旧集数比对，变大才发信；SMTP 走 `smtp.qq.com:465`。
+- `config.json` 和 `state.json` 都在 `.gitignore` 里，凭据和 token 不会进仓库。
 
 ## 为什么不用 GitHub Actions
 

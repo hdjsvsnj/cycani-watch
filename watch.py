@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""次元城动画：只监控指定收藏番剧，集数变大时发邮件。纯标准库。"""
+"""次元城动画：自动同步账号收藏，集数变大就发邮件。纯标准库。
+
+配置 config.json（不要提交到公开仓库）：
+{
+  "smtp_host": "smtp.qq.com", "smtp_port": 465,
+  "smtp_user": "...", "smtp_pass": "...", "mail_to": "...",
+  "account": {"username": "手机号或邮箱", "password": "站点密码"},
+  "watch": [{"id": 123, "title": "手动补充的番剧"}]
+}
+"""
 
 import json
 import os
@@ -9,7 +18,6 @@ import smtplib
 import sys
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.header import Header
@@ -18,19 +26,18 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 
 API = "https://www.cycani.org/api"
-HEADERS = {
+BASE_HEADERS = {
     "X-App-Name": "cyc_web",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "zh-CN,zh;q=0.9",
+    "X-Time-Zone": "Asia/Shanghai",
     "Referer": "https://www.cycani.org/",
-    "Origin": "https://www.cycani.org",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/120.0 Safari/537.36",
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_FILE = os.environ.get("CYCANI_STATE") or os.path.join(HERE, "state.json")
 TZ = timezone(timedelta(hours=8))
-DEFAULT_WATCH = [{"id": 3945, "title": "魔法少女育成计划 restart"}]
 
 
 def _cfg():
@@ -41,17 +48,24 @@ def _cfg():
         return {}
 
 
-def api_get(path):
+def request(method, path, body=None, token=None):
     url = API + path
+    headers = dict(BASE_HEADERS)
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    if token:
+        headers["Authorization"] = token if token.lower().startswith("bearer") else "Bearer " + token
     last_err = None
     for _ in range(3):
         try:
-            req = urllib.request.Request(url, headers=HEADERS)
+            req = urllib.request.Request(url, data=data, headers=headers, method=method)
             with urllib.request.urlopen(req, timeout=20) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
             if payload.get("code") == 0:
                 return payload.get("data")
-            last_err = payload.get("msg")
+            last_err = f"{payload.get('code')} {payload.get('msg')}"
         except urllib.error.HTTPError as exc:
             last_err = f"HTTP {exc.code}"
             if exc.code in (403, 429):
@@ -71,52 +85,98 @@ def ep_of(remarks):
     return int(m.group(1)) if m else None
 
 
-def watch_list():
+def item_of(video):
+    return {
+        "id": int(video.get("video_id") or video.get("id") or 0),
+        "title": (video.get("title") or "").strip(),
+        "remarks": (video.get("remarks") or "").strip(),
+        "ep": ep_of(video.get("remarks")),
+        "total": video.get("total") or 0,
+    }
+
+
+def login():
     cfg = _cfg()
-    raw = os.environ.get("CYCANI_WATCH_IDS")
-    if raw:
-        return [{"id": int(x), "title": ""} for x in raw.split(",") if x.strip().isdigit()]
-    items = cfg.get("watch") or cfg.get("watch_ids") or DEFAULT_WATCH
+    if os.environ.get("CYCANI_USER"):
+        acct = {"username": os.environ.get("CYCANI_USER"),
+                "password": os.environ.get("CYCANI_PASS")}
+    else:
+        acct = cfg.get("account") or {}
+    if not acct.get("username") or not acct.get("password"):
+        return None
+    data = request("POST", "/auth/login", body={
+        "username": acct["username"], "password": acct["password"],
+    })
+    if not data or not data.get("token"):
+        print("[warn] 登录失败，本轮只按手动名单监控", file=sys.stderr)
+        return None
+    return {"token": data["token"], "expires_at": data.get("expires_at")}
+
+
+def token_ok(state):
+    tok = state.get("token")
+    if not tok:
+        return None
+    exp = tok.get("expires_at")
+    if exp:
+        try:
+            dt = datetime.fromisoformat(exp)
+            if dt - datetime.now(TZ) > timedelta(hours=6):
+                return tok.get("token")
+        except Exception:
+            pass
+    return None
+
+
+def fetch_favorites(token):
+    out = {}
+    page = 1
+    while page <= 20:
+        data = request("GET", f"/user/favorites?page={page}&page_size=50", token=token)
+        if not data:
+            break
+        items = data.get("list") or []
+        for it in items:
+            item = item_of(it.get("video") or {})
+            if item["id"]:
+                out[str(item["id"])] = item
+        pager = data.get("pager") or {}
+        if page >= (pager.get("page") or 1) or len(items) < 50:
+            break
+        page += 1
+    return out
+
+
+def manual_targets():
+    cfg = _cfg()
+    items = cfg.get("watch") or cfg.get("watch_ids") or []
     out = []
     for it in items:
         if isinstance(it, int):
-            out.append({"id": it, "title": ""})
+            out.append({"id": it})
         elif isinstance(it, dict) and it.get("id"):
             out.append({"id": int(it["id"]), "title": (it.get("title") or "").strip()})
         elif isinstance(it, str) and it.strip().isdigit():
-            out.append({"id": int(it.strip()), "title": ""})
-    return out or DEFAULT_WATCH
-
-
-def fetch_one(entry):
-    data = api_get(f"/videos/{entry['id']}")
-    if not data:
-        return None
-    return {
-        "id": int(entry["id"]),
-        "title": (data.get("title") or entry.get("title") or "").strip(),
-        "remarks": (data.get("remarks") or "").strip(),
-        "ep": ep_of(data.get("remarks")),
-        "total": data.get("total") or 0,
-        "completed": bool(data.get("completed")),
-    }
+            out.append({"id": int(it.strip())})
+    return out
 
 
 def load_state():
     try:
         with open(STATE_FILE, "r", encoding="utf-8") as fh:
-            state = json.load(fh)
-        if isinstance(state.get("videos"), dict):
-            return state
+            st = json.load(fh)
+        if isinstance(st.get("videos"), dict):
+            st.setdefault("token", None)
+            return st
     except Exception:
         pass
-    return {"videos": {}, "last_run": None}
+    return {"videos": {}, "last_run": None, "token": None}
 
 
-def save_state(state):
+def save_state(st):
     tmp = STATE_FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(state, fh, ensure_ascii=False, indent=2, sort_keys=True)
+        json.dump(st, fh, ensure_ascii=False, indent=2, sort_keys=True)
     os.replace(tmp, STATE_FILE)
 
 
@@ -183,16 +243,41 @@ def main():
     init = "--init" in sys.argv
     dry = "--dry-run" in sys.argv
     state = load_state()
-    snaps = [s for s in (fetch_one(e) for e in watch_list()) if s]
+
+    snaps = []
+    token = token_ok(state)
+    if token is None:
+        tok = login()
+        if tok:
+            state["token"] = tok
+            token = tok["token"]
+    if token:
+        favs = fetch_favorites(token)
+        if favs:
+            snaps.extend(favs.values())
+            print(f"[sync] 收藏 {len(favs)} 部")
+        else:
+            print("[warn] 收藏列表为空或读取失败", file=sys.stderr)
+
+    seen = {str(s["id"]) for s in snaps}
+    for entry in manual_targets():
+        if str(entry["id"]) in seen:
+            continue
+        data = request("GET", f"/videos/{entry['id']}")
+        if data:
+            snaps.append(item_of(data))
+
     if not snaps:
-        print("[error] 未取到数据，跳过")
+        print("[error] 未取到任何番剧，本轮跳过", file=sys.stderr)
         return 1
+
     if init or not state["videos"]:
         state["videos"] = {str(s["id"]): s for s in snaps}
         state["last_run"] = datetime.now(TZ).isoformat(timespec="seconds")
         save_state(state)
         print("[init] 基线：" + "、".join(f"{s['title']} 第{s['ep']}集" for s in snaps))
         return 0
+
     events, merged = [], dict(state["videos"])
     for s in snaps:
         prev = state["videos"].get(str(s["id"])) or {}
@@ -200,12 +285,14 @@ def main():
             events.append({"title": s["title"], "ep": s["ep"], "old_ep": prev.get("ep"),
                            "remarks": s["remarks"], "total": s["total"]})
         merged[str(s["id"])] = s
+
     if not events:
         state["videos"] = merged
         state["last_run"] = datetime.now(TZ).isoformat(timespec="seconds")
         save_state(state)
-        print("[ok] 无更新：" + "、".join(f"{s['title']} {s['remarks']}" for s in snaps))
+        print(f"[ok] 无更新（{len(snaps)} 部：" + "、".join(f"{s['title']} {s['remarks']}" for s in snaps) + "）")
         return 0
+
     subject, html, text = build_mail(events)
     print(f"[found] {len(events)} 条更新")
     print(text)
