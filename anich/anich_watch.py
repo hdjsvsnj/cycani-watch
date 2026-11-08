@@ -202,6 +202,15 @@ def main():
         send_mail("AniCh 追番更新 · %d 部" % len(updates),
                   ["你的收藏有新集数了：", ""] + updates)
         print("[mail] 已发送")
+    elif os.environ.get("FORCE_REPORT") == "1":
+        lines = ["本次巡检结论：暂无更新。", "", "当前「我在看的」收藏："]
+        for it in items:
+            lines.append("- %s（第%s集 / 共%s集）" % (
+                it.get("title") or it.get("id"),
+                it.get("episode") or "?",
+                it.get("episodes_total") or "?"))
+        send_mail("AniCh 巡检报告 · 暂无更新", lines)
+        print("[mail] 巡检报告已发送（暂无更新）")
     return 0
 
 
