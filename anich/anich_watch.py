@@ -217,8 +217,10 @@ def main():
         state.pop("last_error", None)
 
     updates, new_subs = [], []
+    live_ids = []
     for it in items:
         vid = str(it.get("id"))
+        live_ids.append(vid)
         title = it.get("title") or ("#" + vid)
         ep = int(it.get("episode") or 0)
         if vid not in eps:
@@ -231,6 +233,12 @@ def main():
             eps[vid] = ep
         elif ep < old:
             eps[vid] = ep
+
+    pruned = [k for k in list(eps.keys()) if k not in live_ids]
+    for k in pruned:
+        eps.pop(k, None)
+    if pruned:
+        print("[prune] 清理已取消收藏的 %d 条：%s" % (len(pruned), ",".join(pruned)))
 
     print("[sync] 收藏 %d 部" % len(items))
     if os.environ.get("TEST_MAIL") == "1":
@@ -254,12 +262,14 @@ def main():
         cards = []
         for (it, old, ep) in updates:
             name = it.get("title") or "?"
-            block = ("番剧名称：%s<br>更新时间：%s<br>备注信息：第%d集" % (name, now, ep))
+            total = it.get("episodes_total") or "?"
+            block = ("番剧名称：%s<br>更新时间：%s<br>备注信息：第%d集（进度 %d/%s）" % (
+                name, now, ep, ep, total))
             lines.append("")
             lines.append("番剧名称：%s" % name)
             lines.append("更新时间：%s" % now)
-            lines.append("备注信息：第%d集" % ep)
-            cards.append((name, "第%d集" % ep, it.get("image"), block))
+            lines.append("备注信息：第%d集（进度 %d/%s）" % (ep, ep, total))
+            cards.append((name, "第%d集 · %d/%s" % (ep, ep, total), it.get("image"), block))
         send_mail("番剧更新提醒", lines, cards=cards,
                   intro="欧尼酱！你收藏的番剧更新啦：")
         print("[mail] 已发送")
@@ -269,7 +279,9 @@ def main():
         cards = []
         for it in items:
             name = it.get("title") or it.get("id")
-            sub = "第%s集 / 共%s集" % (it.get("episode") or "?", it.get("episodes_total") or "?")
+            ep = it.get("episode") or "?"
+            total = it.get("episodes_total") or "?"
+            sub = "第%s集（进度 %s/%s）" % (ep, ep, total)
             block = ("番剧名称：%s<br>更新时间：%s<br>备注信息：%s" % (name, now, sub))
             lines.append("- %s（%s）" % (name, sub))
             cards.append((name, sub, it.get("image"), block))
