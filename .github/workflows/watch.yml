@@ -1,0 +1,43 @@
+name: cycani-watch
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cycani-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check updates
+        env:
+          CYCANI_SMTP_HOST: smtp.qq.com
+          CYCANI_SMTP_PORT: "465"
+          CYCANI_SMTP_USER: ${{ secrets.CYCANI_SMTP_USER }}
+          CYCANI_SMTP_PASS: ${{ secrets.CYCANI_SMTP_PASS }}
+          CYCANI_MAIL_TO: ${{ secrets.CYCANI_MAIL_TO }}
+        run: python watch.py
+
+      - name: Save baseline
+        run: |
+          if [ -n "$(git status --porcelain state.json)" ]; then
+            git config user.name "cycani-bot"
+            git config user.email "bot@users.noreply.github.com"
+            git add state.json
+            git commit -m "chore: update baseline $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
