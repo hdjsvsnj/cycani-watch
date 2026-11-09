@@ -104,6 +104,10 @@ def main():
         print("[error] 缺少 ZTO_WAYBILL")
         return 1
 
+    if not (os.environ.get("KD100_KEY") and os.environ.get("KD100_CUSTOMER")):
+        print("[skip] 还没配置快递100 的 key，跳过本轮")
+        return 0
+
     # 已经提醒过就退出，避免重复发信
     if os.path.exists(FLAG):
         print("[skip] 该单号已提醒过，退出")
