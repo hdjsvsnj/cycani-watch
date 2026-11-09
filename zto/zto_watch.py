@@ -113,6 +113,13 @@ def main():
         print("[skip] 该单号已提醒过，退出")
         return 0
 
+    if os.environ.get("TEST_MAIL") == "1":
+        send_mail("快递签收提醒 · 链路测试",
+                  ["这是一封测试邮件，证明云端查询与发信链路正常。",
+                   "", "运单号：%s" % WAYBILL, "时间：%s" % _tz_now()])
+        print("[mail] 测试邮件已发送")
+        return 0
+
     obj = query()
     code = str(obj.get("status") or obj.get("returnCode") or "")
     if code and code not in ("200", "0000", "0"):
