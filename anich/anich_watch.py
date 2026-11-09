@@ -82,7 +82,7 @@ def auth_header(token):
     return commas(_ld(10, token) + _ld(18, t))
 
 
-def http(url, data=None, headers=None, timeout=25, retries=3):
+def http(url, data=None, headers=None, timeout=35, retries=4):
     hdr = {"User-Agent": UA}
     hdr.update(headers or {})
     body = None
@@ -208,18 +208,20 @@ def main():
         state["last_error"] = ("%s: %s" % (type(e).__name__, str(e)))[:200]
         with open(STATE_PATH, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
-        print("[error] 巡检失败（连续 %d 次）：%s" % (fails, state["last_error"]))
-        if fails >= 2:
+        print("[warn] 本轮巡检失败（连续 %d 次）：%s" % (fails, state["last_error"]))
+        # 站点偶发超时交给下一轮重试；GitHub 侧不算失败，避免失败通知邮件刷屏
+        # 连续失败较多时，用脚本自己的告警邮件通知，且只在第 2 次和第 42 次发，避免每 3 分钟一封
+        if fails >= 2 and (fails == 2 or fails % 40 == 0):
             try:
                 send_mail("AniCh 巡检异常 · 连续 %d 次失败" % fails,
                           ["巡检连续 %d 次拿不到收藏，可能站点接口变了或账号异常。" % fails,
                            "", "最近一次错误：", state["last_error"],
                            "", "时间：%s" % _tz_now()],
-                          intro="巡检连续 %d 次失败，追番提醒已经失效。" % fails)
+                          intro="巡检连续 %d 次失败，追番提醒可能已经失效。" % fails)
                 print("[mail] 异常告警已发送")
             except Exception as e2:
-                print("[error] 告警邮件也失败：%s" % e2)
-        return 1
+                print("[warn] 告警邮件也失败：%s" % e2)
+        return 0
 
     if not items:
         print("[warn] 收藏为空，本轮跳过")
