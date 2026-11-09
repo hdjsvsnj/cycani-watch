@@ -82,16 +82,29 @@ def auth_header(token):
     return commas(_ld(10, token) + _ld(18, t))
 
 
-def http(url, data=None, headers=None, timeout=20):
+def http(url, data=None, headers=None, timeout=25, retries=3):
     hdr = {"User-Agent": UA}
     hdr.update(headers or {})
     body = None
     if data is not None:
         body = data if isinstance(data, bytes) else data.encode("utf-8")
         hdr.setdefault("Content-Type", "application/x-www-form-urlencoded")
-    req = urllib.request.Request(url, data=body, headers=hdr)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+    last = None
+    for attempt in range(retries):
+        req = urllib.request.Request(url, data=body, headers=hdr)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except Exception as e:
+            last = e
+            code = getattr(e, "code", None)
+            if code is not None and code < 500:
+                raise
+            if attempt < retries - 1:
+                print("[retry] %s 第 %d 次失败（%s: %s），重试中"
+                      % (url.split("?")[0], attempt + 1, type(e).__name__, e))
+                time.sleep(2 * (attempt + 1))
+    raise last
 
 
 def login_token(user, password):
