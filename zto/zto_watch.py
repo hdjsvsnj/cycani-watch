@@ -45,7 +45,7 @@ def query():
     key = os.environ["KD100_KEY"]
     param = json.dumps({"com": COM, "num": WAYBILL, "phone": PHONE},
                        ensure_ascii=False, separators=(",", ":"))
-    sign = hashlib.md5((param + customer + key).encode("utf-8")).hexdigest().upper()
+    sign = hashlib.md5((param + key + customer).encode("utf-8")).hexdigest().upper()
     body = urllib.parse.urlencode({
         "customer": customer,
         "sign": sign,
@@ -136,7 +136,8 @@ def main():
         print("[ok] 暂无有效轨迹，不判定签收")
         return 0
 
-    delivered = (state == "3") or any(w in ctx for w in SIGN_WORDS)
+    delivered = (state == "3") or str(obj.get("ischeck") or "0") == "1" \
+        or any(w in ctx for w in SIGN_WORDS)
     if not delivered:
         print("[ok] 尚未签收")
         return 0
