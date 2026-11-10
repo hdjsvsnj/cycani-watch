@@ -120,6 +120,19 @@ def main():
         print("[mail] 测试邮件已发送")
         return 0
 
+    # 挂在每 3 分钟的宿主工作流上时，距上次真正查询不足 N 秒就跳过
+    interval = int(os.environ.get("ZTO_MIN_INTERVAL") or 0)
+    if interval:
+        last_ts = 0
+        try:
+            with open(LOG, "r", encoding="utf-8") as f:
+                last_ts = int(json.load(f).get("ts") or 0)
+        except Exception:
+            last_ts = 0
+        if time.time() - last_ts < interval:
+            print("[skip] 距上次查询不足 %d 秒，跳过" % interval)
+            return 0
+
     obj = query()
     code = str(obj.get("status") or obj.get("returnCode") or "")
     if code and code not in ("200", "0000", "0"):
@@ -135,7 +148,8 @@ def main():
     print("[query] state=%s 最新轨迹：%s %s" % (state, t, ctx))
 
     with open(LOG, "w", encoding="utf-8") as f:
-        json.dump({"time": _tz_now(), "state": state, "latest": latest},
+        json.dump({"time": _tz_now(), "ts": int(time.time()),
+                   "state": state, "latest": latest},
                   f, ensure_ascii=False, indent=2)
 
     # 接口空壳/查无结果一律不算签收，避免假阳性误发
