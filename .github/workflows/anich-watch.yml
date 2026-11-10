@@ -32,13 +32,25 @@ jobs:
           TEST_MAIL: ${{ inputs.test_mail || '0' }}
           FORCE_REPORT: ${{ inputs.force_report || '0' }}
         run: python3 anich/anich_watch.py
+      - name: 顺带查中通签收
+        continue-on-error: true
+        env:
+          KD100_CUSTOMER: ${{ secrets.KD100_CUSTOMER }}
+          KD100_KEY: ${{ secrets.KD100_KEY }}
+          ZTO_WAYBILL: ${{ secrets.ZTO_WAYBILL }}
+          ZTO_PHONE: ${{ secrets.ZTO_PHONE }}
+          SMTP_USER: ${{ secrets.CYCANI_SMTP_USER }}
+          SMTP_PASS: ${{ secrets.CYCANI_SMTP_PASS }}
+          MAIL_TO: ${{ secrets.CYCANI_MAIL_TO }}
+          ZTO_MIN_INTERVAL: "900"
+        run: python3 zto/zto_watch.py
       - name: 提交基线
         if: always()
         run: |
           git config user.name "anich-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add anich/state.json
+          git add anich/state.json zto/track_cache.json zto/delivered.json 2>/dev/null || true
           if ! git diff --quiet --cached; then
-            git commit -m "chore: anich baseline"
+            git commit -m "chore: anich baseline / zto track"
             git push
           fi
