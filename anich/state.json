@@ -5,5 +5,6 @@
     "39425": 7
   },
   "updated": 1794652034,
-  "fail_count": 0
+  "fail_count": 1,
+  "last_error": "HTTPError: HTTP Error 404: Not Found"
 }
