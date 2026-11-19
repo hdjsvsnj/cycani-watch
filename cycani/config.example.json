@@ -1,0 +1,9 @@
+{
+  "smtp_user": "你的QQ邮箱@qq.com",
+  "smtp_pass": "QQ邮箱SMTP授权码",
+  "mail_to": "收件邮箱",
+  "watch": [
+    {"id": 3948, "title": "转生就是剑 第二季"},
+    {"id": 3945, "title": "魔法少女育成计划 restart"}
+  ]
+}
