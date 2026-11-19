@@ -8,7 +8,7 @@
     },
     "3929": {
       "title": "FX战士久留美",
-      "ep": 8,
+      "ep": 7,
       "remarks": "08|周四20:35后",
       "cover": "https://gimg1.baidu.com/gimg/app=2001&src=img1.cycapp.org/pic/cover/l/d3/99/622288_nmbC3.jpg"
     },
@@ -18,14 +18,7 @@
       "remarks": "08|周三23:35后",
       "cover": "https://gimg1.baidu.com/gimg/app=2001&src=img1.cycapp.org/pic/cover/l/ee/ed/412008_2PmNb.jpg"
     },
-    "_last_mail": {
-      "time": "2026-11-20T03:46:02",
-      "events": [
-        "某暗部的少女共栖 6"
-      ],
-      "ok": true,
-      "error": ""
-    }
+    "_last_mail": null
   },
   "last_run": "2026-11-20T03:46:02"
 }
