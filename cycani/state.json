@@ -20,18 +20,18 @@
     },
     "3945": {
       "title": "魔法少女育成计划 restart",
-      "ep": 7,
-      "remarks": "07|周六25:35后",
+      "ep": 8,
+      "remarks": "08|周六25:35后",
       "cover": "https://gimg1.baidu.com/gimg/app=2001&src=img1.cycapp.org/pic/cover/l/52/fe/418229_gcFij.jpg"
     },
     "_last_mail": {
-      "time": "2026-11-20T23:40:03",
+      "time": "2026-11-24T01:40:03",
       "events": [
-        "某暗部的少女共栖 7"
+        "魔法少女育成计划 restart 8"
       ],
       "ok": true,
       "error": ""
     }
   },
-  "last_run": "2026-11-20T23:40:03"
+  "last_run": "2026-11-24T01:40:03"
 }
